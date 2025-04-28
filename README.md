@@ -1,1 +1,1 @@
-Remote Temperature and Microphone on esp32. Goal is to create platform on server to share live readings and eventually update firmware remotely. 
+Realtime audio over TCP. Analogue Audio -> ESP32 ADC -> TCP socket -> Flask Server
