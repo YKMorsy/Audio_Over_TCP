@@ -7,8 +7,10 @@
 #include "esp_log.h"
 #include "driver/timer.h"
 
-void setup_timer(void);
-void setup_adc(void);
-void audio_task(void);
+#define AUDIO_BUFFER_SIZE 512
+
+extern QueueHandle_t mic_audio_queue; // declared here, defined in mic_sensor.c and used in tcp_server
+
+void audio_init(void);
 
 #endif // MIC_SENSOR_H

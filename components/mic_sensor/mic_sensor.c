@@ -2,7 +2,7 @@
 
 #define TAG_MIC "ADC_MIC_READ"
 
-#define AUDIO_BUFFER_SIZE 512
+
 
 #define TIMER_BASE_CLK (80000000)  // 80MHz base clock for ESP32 timers
 #define TIMER_DIVIDER 80 // 80MHz/80 = 1 MHz timer clock (1 tick is 1 microsecond)
@@ -10,11 +10,13 @@
 #define SAMPLE_RATE 16000
 #define TIMER_INTERVAL_SEC (1.0 / SAMPLE_RATE) // 62.5 microsecond
 
-volatile uint16_t audio_buffer[512];
+volatile uint16_t audio_buffer[AUDIO_BUFFER_SIZE];
 volatile int buffer_index = 0;
 volatile bool buffer_ready = false;
 
-void setup_adc(void)
+QueueHandle_t mic_audio_queue = NULL;
+
+static void setup_adc(void)
 {
     // Configure ADC1 Channel 6 (GPIO34)
     adc1_config_width(ADC_WIDTH_BIT_12);
@@ -27,16 +29,19 @@ static void IRAM_ATTR timer_isr(void* arg)
     timer_group_enable_alarm_in_isr(TIMER_GROUP_0, TIMER_0); // re-enable interrupt
     int adc_read = adc1_get_raw(ADC1_CHANNEL_6); // get adc value
 
-    audio_buffer[buffer_index] = adc_read;
-    buffer_index++;
-    if (buffer_index == 512)
+    if (buffer_index < 512)
+    {
+        audio_buffer[buffer_index] = adc_read;
+        buffer_index++;
+    }
+    else if (buffer_index == 512)
     {
         buffer_ready = true;
         buffer_index = 0;
     }
 }
 
-void setup_timer(void)
+static void setup_timer(void)
 {
     timer_config_t config = 
     {
@@ -55,15 +60,34 @@ void setup_timer(void)
     timer_start(TIMER_GROUP_0, TIMER_0); // start timer
 }
 
-void audio_task(void)
+static void audio_task(void* pvParameters)
 {
     while (1)
     {
+        // push buffer to queue
         if (buffer_ready)
         {
             buffer_ready = false;
-            ESP_LOGI(TAG_MIC, "Buffer full");
+
+            if (mic_audio_queue != NULL)
+            {
+                BaseType_t success = xQueueSend(mic_audio_queue, (void*) audio_buffer, portMAX_DELAY);
+                // if (success == pdTRUE)
+                // {
+                //     ESP_LOGI(TAG_MIC, "Audio buffer sent to queue");
+                // }
+            }
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // vTaskDelay(pdMS_TO_TICKS(5));
     }
+
+    // vTaskDelete(NULL);
+}
+
+void audio_init(void)
+{
+    mic_audio_queue = xQueueCreate(8, sizeof(uint16_t) * AUDIO_BUFFER_SIZE); // queue of 8 buffers
+    setup_adc();
+    setup_timer();
+    xTaskCreate(audio_task, "mic_sampling_task", 4096, NULL, 5, NULL); // create audio task with 4096 byte stack size
 }

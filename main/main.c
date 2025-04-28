@@ -1,6 +1,8 @@
-#include "wifi_manager.h"
-#include "mic_sensor.h"
 #include "nvs_flash_comp.h"
+#include "wifi_manager.h"
+#include "tcp_client.h"
+#include "mic_sensor.h"
+
 
 /*
 1. Capture audio
@@ -19,13 +21,9 @@
 /* stream mic over tcp */
 void app_main(void)
 {
-    setup_adc();
-    setup_timer();
-    audio_task();
-    // mic_in();
-    // // temp_in();
-    // nvs_flash_comp_init();
-
-    // init_wifi();
+    nvs_flash_comp_init();
+    init_wifi();
+    audio_init();
+    tcp_server_init();
 
 }
