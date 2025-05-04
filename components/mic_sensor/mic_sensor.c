@@ -2,17 +2,20 @@
 
 #define TAG_MIC "ADC_MIC_READ"
 
-
-
 #define TIMER_BASE_CLK (80000000)  // 80MHz base clock for ESP32 timers
 #define TIMER_DIVIDER 80 // 80MHz/80 = 1 MHz timer clock (1 tick is 1 microsecond)
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER) // 1,000,000 ticks per second
-#define SAMPLE_RATE 16000
+#define SAMPLE_RATE 20000
 #define TIMER_INTERVAL_SEC (1.0 / SAMPLE_RATE) // 62.5 microsecond
+#define WINDOW_SIZE 8
 
 volatile uint16_t audio_buffer[AUDIO_BUFFER_SIZE];
 volatile int buffer_index = 0;
 volatile bool buffer_ready = false;
+
+volatile int audi_window[WINDOW_SIZE] = {0};
+volatile int audio_window_idx = 0;
+volatile int audio_sum = 0;
 
 QueueHandle_t mic_audio_queue = NULL;
 
@@ -29,12 +32,17 @@ static void IRAM_ATTR timer_isr(void* arg)
     timer_group_enable_alarm_in_isr(TIMER_GROUP_0, TIMER_0); // re-enable interrupt
     int adc_read = adc1_get_raw(ADC1_CHANNEL_6); // get adc value
 
-    if (buffer_index < 512)
+    if (buffer_index < AUDIO_BUFFER_SIZE)
     {
-        audio_buffer[buffer_index] = adc_read;
+        // first few samples are going to be averaged incorrectly but not really an issue for now
+        audio_sum -= audi_window[audio_window_idx%WINDOW_SIZE];
+        audi_window[audio_window_idx%WINDOW_SIZE] = adc_read;
+        audio_sum += adc_read;
+        audio_buffer[buffer_index] = audio_sum/WINDOW_SIZE;
+        audio_window_idx++;
         buffer_index++;
     }
-    else if (buffer_index == 512)
+    else if (buffer_index == AUDIO_BUFFER_SIZE)
     {
         buffer_ready = true;
         buffer_index = 0;
